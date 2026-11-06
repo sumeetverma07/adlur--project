@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Project Files and Folders — Simple Guide</title>
+<style>
+  @page { size: A4; margin: 15mm 16mm; }
+  * { box-sizing: border-box; }
+  body { margin: 0; color: #172033; font: 10pt/1.4 Arial, sans-serif; }
+  h1 { color: #123b63; font-size: 22pt; margin: 0 0 2mm; }
+  h2 { color: #176b87; font-size: 15pt; margin: 6mm 0 2mm; border-bottom: 1px solid #bfd4de; padding-bottom: 1mm; page-break-after: avoid; }
+  h3 { color: #123b63; font-size: 11pt; margin: 4mm 0 1mm; page-break-after: avoid; }
+  p { margin: 1.5mm 0; }
+  code { background: #edf2f5; padding: .3mm 1mm; border-radius: 2px; color: #7c2344; }
+  table { width: 100%; border-collapse: collapse; margin: 2mm 0 4mm; font-size: 9pt; page-break-inside: auto; }
+  tr { page-break-inside: avoid; }
+  th, td { border: 1px solid #bac8d2; padding: 2mm; vertical-align: top; }
+  th { background: #e8f2f6; color: #123b63; text-align: left; }
+  .intro { background: #eef7fb; border-left: 4px solid #176b87; padding: 3mm; margin: 4mm 0; }
+  .warning { background: #fff5dc; border-left: 4px solid #d99b00; padding: 3mm; }
+  .tree { white-space: pre; font: 8.5pt/1.35 Consolas, monospace; background: #172033; color: #f2f6f8; padding: 4mm; border-radius: 4px; }
+  .flow { display: flex; gap: 2mm; align-items: stretch; margin: 3mm 0; }
+  .step { flex: 1; border: 1px solid #8eb5c5; background: #f5fafc; padding: 3mm 2mm; text-align: center; border-radius: 4px; }
+  .arrow { align-self: center; color: #176b87; font-size: 16pt; }
+  .tag { font-weight: bold; color: #176b87; }
+  .page-break { page-break-before: always; }
+  footer { margin-top: 8mm; border-top: 1px solid #ccd5dc; padding-top: 2mm; color: #647581; font-size: 8pt; }
+</style>
+</head>
+<body>
+
+<h1>Project Files and Folders</h1>
+<p><strong>Simple explanation guide</strong> for the AWS Docker Deployment Platform</p>
+
+<div class="intro">
+  <strong>What this project does:</strong> Terraform prepares an AWS network and application platform. Internet traffic enters through an Application Load Balancer. Docker application instances run inside private subnets and scale using an Auto Scaling Group. The application can use private RDS PostgreSQL and Redis services. GitHub Actions checks Terraform and can build/deploy an application after its source and Dockerfile are supplied.
+</div>
+
+<h2>1. Project structure</h2>
+<div class="tree">adlur/
+├── .github/workflows/
+│   ├── build-deploy.yml
+│   └── terraform-check.yml
+├── docs/
+│   ├── architecture.md
+│   ├── architecture.html
+│   ├── architecture.pdf
+│   ├── project-file-guide.html
+│   └── runbook.md
+├── evidence/
+│   └── .gitkeep
+├── infra/aws/
+│   ├── templates/user-data.sh.tftpl
+│   ├── .terraform.lock.hcl
+│   ├── compute.tf
+│   ├── data.tf
+│   ├── main.tf
+│   ├── outputs.tf
+│   ├── terraform.tfvars.example
+│   ├── variables.tf
+│   └── versions.tf
+├── scripts/check-health.ps1
+├── .gitignore
+├── Makefile
+└── README.md</div>
+
+<h2>2. How the parts work together</h2>
+<div class="flow">
+  <div class="step"><strong>Developer</strong><br>pushes code</div><div class="arrow">→</div>
+  <div class="step"><strong>GitHub Actions</strong><br>checks/builds</div><div class="arrow">→</div>
+  <div class="step"><strong>Terraform</strong><br>creates AWS resources</div><div class="arrow">→</div>
+  <div class="step"><strong>AWS</strong><br>runs Docker application</div>
+</div>
+<p>The <code>docs</code> folder explains the design. The <code>infra/aws</code> folder contains the actual infrastructure code. The <code>.github/workflows</code> folder automates checks and deployment. The <code>scripts</code> folder contains a health-test helper. The <code>evidence</code> folder is reserved for real test results.</p>
+
+<h2>3. Root-level files</h2>
+<table>
+  <thead><tr><th style="width:23%">File</th><th>What it contains</th><th>Why it is used</th></tr></thead>
+  <tbody>
+    <tr><td><code>README.md</code></td><td>Main project introduction, implemented features, deployment instructions, limitations and evidence checklist.</td><td>This is the first file a reviewer should read. It explains what the project does and how to use it.</td></tr>
+    <tr><td><code>Makefile</code></td><td>Short commands named <code>fmt</code>, <code>validate</code> and <code>check</code>.</td><td>It avoids typing long Terraform commands. For example, <code>make validate</code> initializes and validates Terraform.</td></tr>
+    <tr><td><code>.gitignore</code></td><td>A list of local or sensitive files that Git must not upload, such as Terraform state, plans and real variable files.</td><td>It prevents secrets, generated files and local Terraform state from being committed accidentally.</td></tr>
+  </tbody>
+</table>
+
+<div class="warning"><strong>Important:</strong> <code>terraform.tfvars</code> and <code>*.tfstate</code> must not be committed. They can contain account details and secret values.</div>
+
+<div class="page-break"></div>
+<h2>4. GitHub Actions — <code>.github/workflows/</code></h2>
+<p>GitHub automatically reads workflow files from this folder.</p>
+<table>
+  <thead><tr><th style="width:28%">File</th><th>What it contains</th><th>Why it is used</th></tr></thead>
+  <tbody>
+    <tr><td><code>terraform-check.yml</code></td><td>A job that checks Terraform formatting, downloads providers without configuring remote state, and validates the configuration.</td><td>It catches formatting and Terraform configuration errors on pull requests and pushes.</td></tr>
+    <tr><td><code>build-deploy.yml</code></td><td>The application delivery pipeline: application preflight, AWS OIDC login, Docker build, Trivy security scan, ECR push, digest lookup, Terraform plan and apply.</td><td>It supports “build once, deploy the same image digest.” If no root Dockerfile exists, application steps and deployment are intentionally skipped.</td></tr>
+  </tbody>
+</table>
+
+<h3>Why deployment may show “Skipped”</h3>
+<p>The assignment did not include the black-box application source or a Dockerfile. The workflow checks for a root <code>Dockerfile</code>. If it is absent, <code>app_available=false</code>; the AWS build and deploy stages are skipped instead of pretending that an application was deployed.</p>
+
+<h2>5. Documentation — <code>docs/</code></h2>
+<table>
+  <thead><tr><th style="width:28%">File</th><th>What it contains</th><th>Why it is used</th></tr></thead>
+  <tbody>
+    <tr><td><code>architecture.pdf</code></td><td>The final five-page architecture submission with diagram, decisions, rejected alternatives, scaling, operations, top five risks and roadmap.</td><td>This is the document to submit or show to the reviewer.</td></tr>
+    <tr><td><code>architecture.html</code></td><td>The styled, editable source used to generate the architecture PDF.</td><td>Edit this when the formatted PDF design or wording must change.</td></tr>
+    <tr><td><code>architecture.md</code></td><td>A Markdown version with more detailed architecture explanations.</td><td>Easy to read directly in GitHub and easy to edit without special software.</td></tr>
+    <tr><td><code>runbook.md</code></td><td>Operational steps for deployment failure, high latency, queue backlog, database incidents, restore testing and NAT/AZ failure.</td><td>It tells an operator what to check and do during common incidents.</td></tr>
+    <tr><td><code>project-file-guide.html</code></td><td>The editable source of this simple project guide.</td><td>It can be updated and printed again whenever project files change.</td></tr>
+    <tr><td><code>project-file-guide.pdf</code></td><td>This guide in portable PDF format.</td><td>It is easy to share and explain during the review.</td></tr>
+  </tbody>
+</table>
+
+<h2>6. Evidence — <code>evidence/</code></h2>
+<table>
+  <thead><tr><th style="width:28%">File/folder</th><th>What it contains</th><th>Why it is used</th></tr></thead>
+  <tbody>
+    <tr><td><code>evidence/</code></td><td>A reserved location for sanitized deployment, load-test, rollback and restore-test results.</td><td>The assignment asks for real evidence. Only actual test output should be saved here.</td></tr>
+    <tr><td><code>.gitkeep</code></td><td>An empty placeholder file.</td><td>Git does not track empty folders, so this keeps the evidence folder in the repository until evidence is added.</td></tr>
+  </tbody>
+</table>
+
+<div class="warning"><strong>Do not create fake evidence.</strong> Add logs or screenshots only after running the deployment or test. Remove passwords, tokens and customer data first.</div>
+
+<div class="page-break"></div>
+<h2>7. AWS infrastructure — <code>infra/aws/</code></h2>
+<p>Terraform reads all <code>.tf</code> files in this directory together. File names organize the code for humans; they do not change Terraform execution order.</p>
+<table>
+  <thead><tr><th style="width:27%">File</th><th>What it contains</th><th>Why it is used</th></tr></thead>
+  <tbody>
+    <tr><td><code>versions.tf</code></td><td>Terraform version requirement, AWS and Random provider versions, S3 remote-state backend declaration, AWS region and common tags.</td><td>It makes tool/provider requirements clear and prepares safe shared remote state.</td></tr>
+    <tr><td><code>variables.tf</code></td><td>Inputs such as project name, environment, region, CIDR, image URI, instance sizes, ASG limits, database size and Redis size.</td><td>The same Terraform code can be reused for development, staging and production without rewriting resources.</td></tr>
+    <tr><td><code>terraform.tfvars.example</code></td><td>Example values for every important variable.</td><td>Copy it to <code>terraform.tfvars</code> and replace the examples. The real file stays ignored by Git.</td></tr>
+    <tr><td><code>main.tf</code></td><td>Availability Zones, VPC, two public subnets, two private app subnets, two private DB subnets, IGW, NAT, route tables and security groups.</td><td>This creates the network foundation and controls which components can communicate.</td></tr>
+    <tr><td><code>compute.tf</code></td><td>Amazon Linux AMI lookup, EC2 IAM role/profile, ECR/SSM/secret permissions, ALB, target group, listener, launch template, ASG and scaling policy.</td><td>This runs Docker application instances, distributes traffic, replaces unhealthy instances and scales capacity.</td></tr>
+    <tr><td><code>data.tf</code></td><td>Random database password, Secrets Manager secret, RDS subnet group/PostgreSQL instance, Redis subnet group and replication group.</td><td>This creates private managed data services and avoids hardcoding a database password.</td></tr>
+    <tr><td><code>outputs.tf</code></td><td>Useful results such as ALB DNS name, VPC ID, private subnet IDs and database secret ARN.</td><td>It displays values needed after deployment or by other automation.</td></tr>
+    <tr><td><code>.terraform.lock.hcl</code></td><td>Exact provider versions and checksums selected by <code>terraform init</code>.</td><td>It makes provider installation repeatable and should normally be committed.</td></tr>
+  </tbody>
+</table>
+
+<h2>8. EC2 startup template — <code>infra/aws/templates/</code></h2>
+<table>
+  <thead><tr><th style="width:27%">File</th><th>What it contains</th><th>Why it is used</th></tr></thead>
+  <tbody>
+    <tr><td><code>user-data.sh.tftpl</code></td><td>A startup shell template that installs Docker/AWS CLI, reads database credentials from Secrets Manager, logs in to ECR and starts the application container on port 8080.</td><td>Each new Auto Scaling instance configures itself automatically without console or SSH steps.</td></tr>
+  </tbody>
+</table>
+
+<div class="page-break"></div>
+<h2>9. Helper script — <code>scripts/</code></h2>
+<table>
+  <thead><tr><th style="width:27%">File</th><th>What it contains</th><th>Why it is used</th></tr></thead>
+  <tbody>
+    <tr><td><code>check-health.ps1</code></td><td>A PowerShell script that repeatedly requests <code>http://ALB-DNS/healthz</code> and reports success or failure.</td><td>It provides a simple post-deployment health check and can be used while collecting real evidence.</td></tr>
+  </tbody>
+</table>
+
+<h2>10. Tool-managed folders</h2>
+<table>
+  <thead><tr><th style="width:27%">Folder</th><th>What it contains</th><th>What you should do</th></tr></thead>
+  <tbody>
+    <tr><td><code>.git/</code></td><td>Git history, branches, commit objects, configuration and internal metadata.</td><td>Do not edit its files manually. Use Git commands such as <code>git status</code>, <code>git add</code> and <code>git commit</code>.</td></tr>
+    <tr><td><code>infra/aws/.terraform/</code></td><td>Downloaded Terraform providers and local initialization data.</td><td>Do not commit or edit it. Terraform recreates it with <code>terraform init</code>.</td></tr>
+  </tbody>
+</table>
+
+<h2>11. Simple deployment sequence</h2>
+<ol>
+  <li>Copy <code>terraform.tfvars.example</code> to <code>terraform.tfvars</code> and enter correct values.</li>
+  <li>Configure the S3 state bucket, DynamoDB lock table and AWS credentials.</li>
+  <li>Run <code>terraform init</code>, <code>terraform plan</code> and <code>terraform apply</code>.</li>
+  <li>Terraform creates networking, security, ALB, Auto Scaling, RDS and Redis.</li>
+  <li>When real application source and a root Dockerfile are available, the build workflow scans and pushes the image to ECR.</li>
+  <li>The workflow deploys the image digest; ASG replaces instances gradually and the ALB sends traffic only to healthy targets.</li>
+  <li>Run <code>scripts/check-health.ps1</code> with the ALB DNS name and save only real, sanitized evidence.</li>
+</ol>
+
+<h2>12. What is implemented and what is not</h2>
+<table>
+  <thead><tr><th>Implemented in code</th><th>Documented/proposed only</th></tr></thead>
+  <tbody><tr><td>VPC, subnets, IGW, NAT, routes, security groups, ALB, EC2 ASG, Docker startup, RDS, Redis, Secrets Manager, Terraform checks and deployment template.</td><td>Kubernetes, second cloud, GitOps, metric-gated canary, worker-specific command/scaling, tenant fleet controller, and executed load/rollback/restore evidence.</td></tr></tbody>
+</table>
+
+<div class="intro"><strong>Best review explanation:</strong> “This project implements the AWS infrastructure that I understand and can defend. Advanced assignment requirements are clearly described as future work instead of being falsely marked as completed.”</div>
+
+<footer>Project Files and Folders — Simple Guide · Generated from the current repository structure</footer>
+</body>
+</html>

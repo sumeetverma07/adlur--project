@@ -39,6 +39,8 @@ NAT Gateway in public A supplies outbound access for private instances
 
 The submission-ready deliverable is [docs/architecture.pdf](docs/architecture.pdf) (exactly five A4 pages). Its editable sources are [docs/architecture.html](docs/architecture.html) and [docs/architecture.md](docs/architecture.md). It includes the diagram, seven decisions with rejected alternatives, exactly five top risks, scaling maths, SLOs, tenant design, cost controls, and roadmap.
 
+For a beginner-friendly explanation of every project folder and meaningful file, see [docs/project-file-guide.pdf](docs/project-file-guide.pdf). Its editable source is [docs/project-file-guide.html](docs/project-file-guide.html).
+
 ## Prerequisites
 
 - Terraform >= 1.6
