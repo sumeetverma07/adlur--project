@@ -75,7 +75,7 @@ curl "http://$(terraform output -raw alb_dns_name)/healthz"
 
 ## Safe image release
 
-The workflow in `.github/workflows/build-deploy.yml` builds and scans one image, pushes it to ECR, resolves the digest, and applies that exact digest through Terraform. An ASG instance refresh gradually replaces instances while the ALB keeps traffic on healthy instances. Set these GitHub environment secrets/variables:
+The workflow in `.github/workflows/build-deploy.yml` first checks whether the assignment's black-box application and root `Dockerfile` are present. Because they were not supplied, infrastructure-only pushes pass with a notice and safely skip image/AWS deployment steps. Once the real application is added, the workflow builds and scans one image, pushes it to ECR, resolves the digest, and applies that exact digest through Terraform. An ASG instance refresh gradually replaces instances while the ALB keeps traffic on healthy instances. Set these GitHub environment secrets/variables before adding/running the application build:
 
 - Secrets: `AWS_ROLE_ARN`, `TF_STATE_BUCKET`, `TF_LOCK_TABLE`
 - Variables: `AWS_REGION`, `ECR_REPOSITORY`

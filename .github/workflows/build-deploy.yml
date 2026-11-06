@@ -19,17 +19,35 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       image_uri: ${{ steps.digest.outputs.image_uri }}
+      app_available: ${{ steps.preflight.outputs.app_available }}
     steps:
       - uses: actions/checkout@v4
+
+      - name: Check whether the black-box application was supplied
+        id: preflight
+        shell: bash
+        run: |
+          if [[ -f Dockerfile ]]; then
+            echo "app_available=true" >> "${GITHUB_OUTPUT}"
+            echo "Dockerfile found; image build will run."
+          else
+            echo "app_available=false" >> "${GITHUB_OUTPUT}"
+            echo "::notice::No root Dockerfile was supplied with the assignment. Infrastructure checks pass, but image build and deployment are intentionally skipped."
+          fi
+
       - uses: aws-actions/configure-aws-credentials@v4
+        if: steps.preflight.outputs.app_available == 'true'
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: ${{ vars.AWS_REGION }}
       - id: login
+        if: steps.preflight.outputs.app_available == 'true'
         uses: aws-actions/amazon-ecr-login@v2
       - name: Build once
+        if: steps.preflight.outputs.app_available == 'true'
         run: docker build --pull -t app:${{ github.sha }} .
       - name: Scan image
+        if: steps.preflight.outputs.app_available == 'true'
         uses: aquasecurity/trivy-action@0.28.0
         with:
           image-ref: app:${{ github.sha }}
@@ -37,6 +55,7 @@ jobs:
           exit-code: "1"
           ignore-unfixed: true
       - name: Push image
+        if: steps.preflight.outputs.app_available == 'true'
         env:
           REGISTRY: ${{ steps.login.outputs.registry }}
           REPOSITORY: ${{ vars.ECR_REPOSITORY }}
@@ -44,6 +63,7 @@ jobs:
           docker tag app:${GITHUB_SHA} "${REGISTRY}/${REPOSITORY}:${GITHUB_SHA}"
           docker push "${REGISTRY}/${REPOSITORY}:${GITHUB_SHA}"
       - id: digest
+        if: steps.preflight.outputs.app_available == 'true'
         env:
           REGISTRY: ${{ steps.login.outputs.registry }}
           REPOSITORY: ${{ vars.ECR_REPOSITORY }}
@@ -53,6 +73,7 @@ jobs:
 
   deploy:
     needs: build
+    if: needs.build.outputs.app_available == 'true'
     runs-on: ubuntu-latest
     environment: ${{ inputs.environment || 'dev' }}
     concurrency: deploy-${{ inputs.environment || 'dev' }}
