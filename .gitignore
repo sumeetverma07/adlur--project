@@ -1,0 +1,9 @@
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+terraform.tfvars
+crash.log
+evidence/*.log
+evidence/*.json
+!evidence/.gitkeep

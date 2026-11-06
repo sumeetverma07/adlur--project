@@ -1,0 +1,26 @@
+#!/bin/bash
+set -euo pipefail
+
+dnf update -y
+dnf install -y docker awscli
+systemctl enable --now docker
+
+SECRET_JSON="$(aws secretsmanager get-secret-value --region '${aws_region}' --secret-id '${db_secret_id}' --query SecretString --output text)"
+DB_USER="$(printf '%s' "$SECRET_JSON" | python3 -c 'import json,sys; print(json.load(sys.stdin)["username"])')"
+DB_PASSWORD="$(printf '%s' "$SECRET_JSON" | python3 -c 'import json,sys; print(json.load(sys.stdin)["password"])')"
+REGISTRY="$(printf '%s' '${image_uri}' | cut -d/ -f1)"
+
+aws ecr get-login-password --region '${aws_region}' | docker login --username AWS --password-stdin "$REGISTRY"
+
+docker run --name app --restart unless-stopped \
+  --stop-timeout 75 \
+  -p 8080:8080 \
+  -e DB_HOST='${db_host}' \
+  -e DB_PORT='5432' \
+  -e DB_NAME='appdb' \
+  -e DB_USER="$DB_USER" \
+  -e DB_PASSWORD="$DB_PASSWORD" \
+  -e REDIS_HOST='${redis_host}' \
+  -e REDIS_PORT='6379' \
+  -e REDIS_TLS='true' \
+  '${image_uri}'

@@ -1,0 +1,83 @@
+name: Build, scan, and deploy immutable image
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        type: choice
+        options: [dev, staging, production]
+        required: true
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    outputs:
+      image_uri: ${{ steps.digest.outputs.image_uri }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+      - id: login
+        uses: aws-actions/amazon-ecr-login@v2
+      - name: Build once
+        run: docker build --pull -t app:${{ github.sha }} .
+      - name: Scan image
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: app:${{ github.sha }}
+          severity: CRITICAL,HIGH
+          exit-code: "1"
+          ignore-unfixed: true
+      - name: Push image
+        env:
+          REGISTRY: ${{ steps.login.outputs.registry }}
+          REPOSITORY: ${{ vars.ECR_REPOSITORY }}
+        run: |
+          docker tag app:${GITHUB_SHA} "${REGISTRY}/${REPOSITORY}:${GITHUB_SHA}"
+          docker push "${REGISTRY}/${REPOSITORY}:${GITHUB_SHA}"
+      - id: digest
+        env:
+          REGISTRY: ${{ steps.login.outputs.registry }}
+          REPOSITORY: ${{ vars.ECR_REPOSITORY }}
+        run: |
+          DIGEST=$(aws ecr describe-images --repository-name "${REPOSITORY}" --image-ids imageTag="${GITHUB_SHA}" --query 'imageDetails[0].imageDigest' --output text)
+          echo "image_uri=${REGISTRY}/${REPOSITORY}@${DIGEST}" >> "${GITHUB_OUTPUT}"
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment || 'dev' }}
+    concurrency: deploy-${{ inputs.environment || 'dev' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.0
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+      - working-directory: infra/aws
+        run: |
+          terraform init \
+            -backend-config="bucket=${{ secrets.TF_STATE_BUCKET }}" \
+            -backend-config="key=${{ inputs.environment || 'dev' }}/platform.tfstate" \
+            -backend-config="region=${{ vars.AWS_REGION }}" \
+            -backend-config="dynamodb_table=${{ secrets.TF_LOCK_TABLE }}" \
+            -backend-config="encrypt=true"
+      - working-directory: infra/aws
+        env:
+          TF_VAR_image_uri: ${{ needs.build.outputs.image_uri }}
+          TF_VAR_environment: ${{ inputs.environment || 'dev' }}
+          TF_VAR_aws_region: ${{ vars.AWS_REGION }}
+        run: |
+          terraform plan -out=tfplan
+          terraform apply -auto-approve tfplan
